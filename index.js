@@ -133,16 +133,32 @@ async function startSession(sessionId, phoneNumber = null) {
   return sock;
 }
 
-async function sendMessage(sessionId, phone, message, mediaUrl = null) {
+async function sendMessage(sessionId, phone, message, mediaUrl = null, msgType = null, extra = {}) {
   const session = sessions.get(sessionId);
   if (!session || session.status !== "online") throw new Error("Session not online");
-  const jid = phone.includes("@") ? phone : `${phone}@s.whatsapp.net`;
+  if (!phone) throw new Error("Phone number is required");
+  const cleanPhone = phone.replace(/[^0-9]/g, "");
+  const jid = cleanPhone.includes("@") ? cleanPhone : `${cleanPhone}@s.whatsapp.net`;
+
+  // Handle buttons/card message
+  if (msgType === "buttons" && extra.buttons) {
+    const buttonMsg = {
+      text: `${extra.title ? "*" + extra.title + "*\n\n" : ""}${extra.body || message || ""}${extra.footer ? "\n\n_" + extra.footer + "_" : ""}`,
+    };
+    // WhatsApp buttons via Baileys (interactive buttons often blocked on regular numbers,
+    // so we send as formatted text with numbered options)
+    const optionsText = extra.buttons.map((b, i) => `${i + 1}. ${b.text}`).join("\n");
+    buttonMsg.text += `\n\n${optionsText}`;
+    await session.sock.sendMessage(jid, buttonMsg);
+    return { success: true };
+  }
 
   if (mediaUrl) {
     const response = await fetch(mediaUrl);
     const buffer = Buffer.from(await response.arrayBuffer());
     const mimeType = response.headers.get("content-type") || "image/jpeg";
     if (mimeType.startsWith("image/")) await session.sock.sendMessage(jid, { image: buffer, caption: message || "" });
+    else if (mimeType.startsWith("audio/")) await session.sock.sendMessage(jid, { audio: buffer, mimetype: mimeType, ptt: true });
     else if (mimeType.startsWith("video/")) await session.sock.sendMessage(jid, { video: buffer, caption: message || "" });
     else await session.sock.sendMessage(jid, { document: buffer, mimetype: mimeType, fileName: "file" });
   } else {
@@ -178,8 +194,8 @@ const server = http.createServer(async (req, res) => {
       return res.end(JSON.stringify({ success: true }));
     }
     if (pathname === "/message/send" && req.method === "POST") {
-      const { session_id, phone, message, media_url } = data;
-      const result = await sendMessage(session_id, phone, message, media_url);
+      const { session_id, phone, message, media_url, type, title, body: msgBody, footer, buttons } = data;
+      const result = await sendMessage(session_id, phone, message || msgBody || "", media_url, type, { title, body: msgBody, footer, buttons });
       res.writeHead(200);
       return res.end(JSON.stringify(result));
     }
