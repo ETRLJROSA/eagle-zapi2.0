@@ -1,3 +1,13 @@
-  "node": ">=18"
-  }
-}
+ "name": "eagle-zapi-baileys",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Backend Baileys para Eagle zAPI - WhatsApp connection",
+  "description": "Backend Baileys para Eagle zAPI",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.16",
